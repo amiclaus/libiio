@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 #include "iio_common.h"
 
@@ -33,12 +34,14 @@
 
 #define SAMPLES_PER_READ 256
 #define DEFAULT_FREQ_HZ  100
+#define REFILL_PER_BENCHMARK 10
 
 static const struct option options[] = {
 	  {"trigger", required_argument, 0, 't'},
 	  {"buffer-size", required_argument, 0, 'b'},
 	  {"samples", required_argument, 0, 's' },
 	  {"auto", no_argument, 0, 'a'},
+	  {"benchmark", no_argument, 0, 'B'},
 	  {0, 0, 0, 0},
 };
 
@@ -49,6 +52,8 @@ static const char *options_descriptions[] = {
 	"Size of the capture buffer. Default is 256.",
 	"Number of samples to capture, 0 = infinite. Default is 0.",
 	"Scan for available contexts and if only one is available use it.",
+	"Benchmark throughput."
+		"\n\t\t\tStatistics will be printed on the standard input.",
 };
 
 static struct iio_context *ctx;
@@ -65,6 +70,19 @@ static void quit_all(int sig)
 	app_running = false;
 	if (buffer)
 		iio_buffer_cancel(buffer);
+}
+
+static uint64_t get_time_us(void)
+{
+	struct timespec tp;
+
+#ifdef _WIN32
+	timespec_get(&tp, TIME_UTC);
+#else
+	clock_gettime(CLOCK_REALTIME, &tp);
+#endif
+
+	return tp.tv_sec * 1000000ull + tp.tv_nsec / 1000;
 }
 
 #ifdef _WIN32
@@ -186,7 +204,7 @@ static ssize_t print_sample(const struct iio_channel *chn,
 	return (ssize_t) len;
 }
 
-#define MY_OPTS "t:b:s:T:"
+#define MY_OPTS "t:b:s:T:B"
 int main(int argc, char **argv)
 {
 	char **argw;
@@ -198,6 +216,8 @@ int main(int argc, char **argv)
 	ssize_t sample_size;
 	ssize_t ret;
 	struct option *opts;
+	bool mib, benchmark = false;
+	uint64_t before, after, rate, total;
 
 	argw = dup_argv(MY_NAME, argc, argv);
 
@@ -237,6 +257,9 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 			buffer_size = sanitize_clamp("buffer size", optarg, 1, SIZE_MAX);
+			break;
+		case 'B':
+			benchmark = true;
 			break;
 		case 's':
 			if (!optarg) {
@@ -371,7 +394,11 @@ int main(int argc, char **argv)
 	_setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-	while (app_running) {
+
+	for (i = 0, total = 0; app_running; ) {
+		if (benchmark)
+			before = get_time_us();
+
 		ret = iio_buffer_refill(buffer);
 		if (ret < 0) {
 			if (app_running) {
@@ -380,6 +407,26 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Unable to refill buffer: %s\n", buf);
 			}
 			break;
+		}
+
+		if (benchmark) {
+			after = get_time_us();
+			rate = buffer_size * sample_size * 1000000ull / (after - before);
+
+			total += rate;
+
+			if (++i == REFILL_PER_BENCHMARK) {
+				mib = rate > 1000000;
+
+				printf("Throughput: %llu %ciB/s    \r",
+				       total / (REFILL_PER_BENCHMARK * 1000 * (mib ? 1000 : 1)),
+				       mib ? 'M' : 'K');
+
+				i = 0;
+				total = 0;
+			}
+
+			continue;
 		}
 
 		/* If there are only the samples we requested, we don't need to
