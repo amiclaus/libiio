@@ -1545,6 +1545,39 @@ __api void iio_buffer_set_data(struct iio_buffer *buf, void *data);
  * @return The pointer previously associated if present, or NULL */
 __api void * iio_buffer_get_data(const struct iio_buffer *buf);
 
+/** @} *//* ------------------------------------------------------------------*/
+/* ---------------------------- HWMON support --------------------------------*/
+/** @defgroup Hwmon Compatibility with hardware monitoring (hwmon) devices
+ * @{
+ * @enum hwmon_chan_type
+ * @brief Hwmon channel type
+ *
+ * Libiio support hardware-monitoring (hwmon) devices as well. This enum
+ * specifies the type of data associated with the hwmon channel.
+ */
+enum hwmon_chan_type {
+	HWMON_VOLTAGE,
+	HWMON_FAN,
+	HWMON_PWM,
+	HWMON_TEMP,
+	HWMON_CURRENT,
+	HWMON_POWER,
+	HWMON_ENERGY,
+	HWMON_HUMIDITY,
+	HWMON_INTRUSION,
+	HWMON_CHAN_TYPE_UNKNOWN = IIO_CHAN_TYPE_UNKNOWN,
+};
+
+/**
+ * @brief Get the type of the given hwmon channel
+ * @param chn A pointer to an iio_channel structure
+ * @return The type of the hwmon channel */
+static inline enum hwmon_chan_type
+hwmon_channel_get_type(const struct iio_channel *chn)
+{
+	return (enum hwmon_chan_type) iio_channel_get_type(chn);
+}
+
 
 /** @} *//* ------------------------------------------------------------------*/
 /* ------------------------- Low-level functions -----------------------------*/

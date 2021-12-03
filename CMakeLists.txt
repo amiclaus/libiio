@@ -246,6 +246,8 @@ if(WITH_LOCAL_BACKEND)
 	if (WITH_LOCAL_CONFIG)
 		list(APPEND LIBIIO_CFILES ./libini/libini.c)
 	endif()
+
+	option(WITH_HWMON "Add compatibility with the hardware monitoring (hwmon) subsystem" OFF)
 endif()
 
 option(WITH_SERIAL_BACKEND "Enable the serial backend" OFF)
